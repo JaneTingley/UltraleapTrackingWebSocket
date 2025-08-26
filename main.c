@@ -264,7 +264,7 @@ static int callback_websocket(struct lws *wsi,
 
 static struct lws_protocols protocols[] = {
     {
-        NULL,
+        "v6.json",
         callback_websocket,
         1 * sizeof(int)
     },
