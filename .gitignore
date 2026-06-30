@@ -27,3 +27,4 @@ output/
 leapjs-master/
 CMakeLists.txt.lws
 CallbackSample.c
+.DS_Store

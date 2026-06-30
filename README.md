@@ -1,143 +1,107 @@
+<p align="center"><img src="platypus_files/icon.png" width="128px" /></p>
 
 # Ultraleap Tracking WebSocket
 
-![Wow](res/unbelievable.png)
+This modified fork of Ultraleap Tracking WebSocket restores communication between LeapJS-based projects and Leap Motion Controllers on **macOS** following the removal of WebSocket support from Ultraleap's official software. The end result is a binary wrapped as a macOS `.app` for easy deployment.
 
-- [:question: What is it ?](#question-what-is-it-)
-- [:sparkles: What can it do ?](#sparkles-what-can-it-do-)
-- [:wrench: How to build ?](#wrench-how-to-build-)
-  - [:blue\_square: Windows](#blue_square-windows)
-    - [:package: `vcpkg` instructions](#package-vcpkg-instructions)
-  - [:penguin: Linux](#penguin-linux)
-    - [:whale: `docker` instructions](#whale-docker-instructions)
-  - [:apple: MacOS](#apple-macos)
-- [:checkered\_flag: How to use ?](#checkered_flag-how-to-use-)
-- [:memo: Authors & Contributors](#memo-authors--contributors)
+To use the prebuilt version, simply download the `.dmg` from this repository's [Releases](https://github.com/JaneTingley/UltraleapTrackingWebSocket/releases), or read on to build from source.
 
-## :question: What is it ?
+## Confirmed Working Build Requirements
 
-With the release of Ultraleap Gemini V5 hand tracking, the websocket feature present in Leap Motion Orion V4 was removed. This meant that [LeapJS](https://github.com/leapmotion/leapjs) experiences would no longer work with the newer tracking software.
+The prebuilt `.dmg` was built using:
 
-This **Ultraleap Tracking WebSocket** repository aims to maintain some form of retro-compatibility with LeapJS and enable web developers to receive tracking data in their browser with the latest generation of Ultraleap hand tracking.
+- CMake 4.3.3
+- Ultraleap Hyperion v6.2.0
+- libwebsockets v4.5.8
+- Platypus 5.5.0
 
-## :sparkles: What can it do ?
+## Build Overview
 
-For now the goal is to be 100% compatible with what was called protocol `v6` in LeapJS which includes LeapJS version 0.6.0 through to 1.1.1. Here is a quick list of the features of `v6` and which ones has been implemented so far:
+1. Ensure that CMake is installed; it is available via [Homebrew](https://brew.sh/).
 
-* Connection on `v6.json` endpoint :heavy_check_mark:
-* Stream tracking data :heavy_check_mark:
-* Focus and background messages :heavy_check_mark:
-* Switch to HMD mode :heavy_check_mark:
-* Switch to Screentop mode :heavy_check_mark: (NEW - use latest LeapJS `master` branch)
-* Device events :x:
-* Gestures :x:
-* Secure WebSocket :x:
+2. Download and install the latest version of [Ultraleap's official software](https://www.ultraleap.com/downloads/leap-controller/) based on your macOS architecture (Intel / Apple Silicon).
 
-## :wrench: How to build ?
+3. Download the source code of the latest stable build of [libwebsockets](https://github.com/warmcat/libwebsockets/tags).
 
-### :blue_square: Windows
+4. Build libwebsockets **with SSL support disabled**.
 
-You'll need [Ultraleap Gemini V5 or above](https://leap2.ultraleap.com/downloads) hand tracking to be installed, and OpenSSL too. You also have to add libwebsockets. If you have `vcpkg`, there is [specific instructions](#package-vcpkg-instructions) that might make things easier for you.
+5. Clone this repository.
 
-Pull the content of this repository and use CMake to build the solution:
+6. Build Ultraleap Tracking WebSocket, pointing it to your custom libwebsockets build.
 
-```bash
-# Pull repository
-git clone https://github.com/ultraleap/UltraleapTrackingWebSocket.git
-cd ultraleap-tracking-websocket
+7. Download and install [Platypus](https://sveinbjorn.org/platypus), a software for wrapping command line scripts into macOS application bundles.
 
-# Prepare build
-mkdir build
-cd build
+8. Configure and create a macOS app bundle using Platypus.
+   - Set the "Script Path" to the `platypus_files/launcher.sh` file included in this repository.
 
-# Build solution
-cmake ..
+   - Ensure that `libLeapC.dylib`, `libwebsockets.21.dylib`, and `Ultraleap-Tracking-WS` (all found in the `build` directory created in step 6) are added to the "Bundled Files" section of the Platypus configuration.
+
+9. Use Disk Utility or the `hdiutil` command line tool to package the `.app` in a `.dmg` for easy distribution.
+
+## Build (Detail)
+
+1. Ensure that **CMake** is installed. This can be done using [Homebrew](https://brew.sh/).
+   - To install Homebrew, open a terminal and run the following command:
+
+   ```sh
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+   - To install CMake, once Homebrew is installed, run:
+
+   ```sh
+   brew install cmake
+   ```
+
+2. From [Ultraleap's official website](https://www.ultraleap.com/downloads/leap-controller/), find and retrieve the latest version of their official Leap Motion Controller software for your Mac's particular architecture (Intel / Apple Silicon). Ensure that the software installs to the default `/Applications` directory.
+
+   This step is necessary because the macOS version of the LeapSDK is bundled within the resulting `Ultraleap Hand Tracking.app`.
+
+3. Download and extract the source code of the latest stable version of **libwebsockets** from its [GitHub repository](https://github.com/warmcat/libwebsockets/tags).
+
+4. Build **libwebsockets** without SSL support. In a terminal, navigate to the directory where you extracted its source code and run the following commands:
+
+```sh
+mkdir build && cd build
+cmake .. -DLWS_WITH_SSL=OFF
+make -j $(sysctl -n hw.logicalcpu)
 ```
 
-Then in the `build` folder you should be able to find your solution and build the executable with Visual Studio.
+5. Clone this repository.
 
-#### :package: `vcpkg` instructions
+6. Build Ultraleap Tracking WebSocket, specifying the location of your custom libwebsockets build. In a terminal, navigate to the directory where you cloned this repository and run the following commands. Replace `'/absolute/path/to/libwebsockets/build'` with the path to your libwebsockets `build` directory.
+   - _On macOS, you can right-click on any folder in Finder, hold down the Option key, and click `Copy "FolderName" as Pathname` to easily retrieve a pasteable absolute path._
 
-Start by [installing and setting vcpkg](https://vcpkg.io/en/getting-started.html). Then install libwebsockets with `vcpkg install libwebsockets --triplet x64-windows`. From then, you can follow these instructions:
-
-```bash
-# Pull repository
-git clone https://github.com/ultraleap/UltraleapTrackingWebSocket.git
-cd ultraleap-tracking-websocket
-
-# Prepare build
-mkdir build
-cd build
-
-# Build solution
-cmake -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ..
-cmake --build .
+```sh
+mkdir build && cd build
+cmake -DLWS_CUSTOM_ROOT='/absolute/path/to/libwebsockets/build' ..
+make -j $(sysctl -n hw.logicalcpu)
 ```
 
-### :penguin: Linux
+7. Download and install [Platypus](https://sveinbjorn.org/platypus), a free and open-source software tool for wrapping command line scripts into macOS application bundles.
 
-To build on Linux, you'll need to have a couple of dependencies installed on your system:
+8. Open Platypus and proceed to configure and create a macOS app bundle.
 
-* CMake (package `cmake` on Ubuntu/Debian)
-* Ultraleap's tracking service and SDK (Ultraleap's website has [instructions on how to add the repository and install the packages](https://docs.ultraleap.com/linux/)
-* libwebsockets (package `libwebsockets-dev` on Ubuntu/Debian)
+   `platypus_files/launcher.sh` (in this repository) is a helper script that launches the `Ultraleap-Tracking-WS` binary built in step 6 as a background process and redirects its console messages to `~/Library/Logs/UltraleapTrackingWebSocket.log`. It also ensures that the binary's background execution is stopped when the app bundle is quitted by the user (i.e. after right-clicking its icon in the macOS dock and selecting "Quit"). **This will serve as the base script for the Platypus app bundle.**
 
-If you satisfy those dependencies, you can go ahead, pull the repository and build the executable:
+   Using the below screenshot as a reference, configure Platypus, ensuring that:
+   - **Script Path** has been set to `platypus_files/launcher.sh` using the **Select Script...** button.
 
-```bash
-# Pull repository
-git clone https://github.com/ultraleap/UltraleapTrackingWebSocket.git
-cd ultraleap-tracking-websocket
+   - **Interface** has been set to **None**.
 
-# Prepare build
-mkdir build
-cd build
+   - `lipLeapC.dylib`, `libwebsockets.21.dylib`, and `Ultraleap-Tracking-WS` have all been added to **Bundled Files (copied into the application's Resources folder)** via the **+** button. These should all be found in the `build` directory created in step 6.
 
-# Build solution
-cmake ..
-```
+   An optional (but helpful for identification) app icon can be set using the button next to **Custom Icon**, choosing **Select Image File...** and selecting the `icon.png` file provided in this respository's `platypus_files` directory.
 
-#### :whale: `docker` instructions
+   When completed, click **Create App** and save the app bundle to a directory of your choosing. Ensure that **Create symlink to script and bundled files** IS NOT checked and that **Strip nib file to reduce app size** IS checked.
 
-Very useful if you want to cross-build for Linux, or avoid having to build and add libwebsockets to your system. Run the following on a Linux-based system:
+![Platypus Configuration](platypus_files/config.png)
 
-```bash
-# Build Docker image
-docker build -t leapws-builder:latest .
+9. Use Disk Utility or the `hdiutil` command line tool to package the `.app` in a `.dmg` for easy distribution.
+   - If using Disk Utility, first place the app bundle created in step 8 in its own directory, then in Disk Utility select **File → New Image → Image from Folder...** and choosing that directory. Ensure that **Encryption** is set to "none" and **Image Format** is set to "compressed," then click **Save** to create your `.dmg`.
 
-# Run the container (also mounts the result folder)
-docker run -v "$(pwd)/output":/code/build/output --rm -it leapws-builder:latest
-```
+   - If using `hdiutil`, open a terminal window and run the following command. Replace `'/absolute/path/to/bundled.app'` with the path to the app bundle created in step 8, and `'/absolute/output/path/UltraleapTrackingWebSocket.dmg'` with your desired output path (including the disk image's name and `.dmg` extension).
 
-The resulting build should be found in the `output` folder.
-
-### :apple: MacOS
-
-Ensure you have Xcode or at least the XCode Command Line Tools installed, and that [homebrew](https://brew.sh) is installed and set up. Make sure you also have installed [Ultraleap Gemini V5 or above](https://leap2.ultraleap.com/downloads) hand tracking service for Mac.
-
-Install `libwebsockets` with `brew install libwebsockets`. From there, you can follow the instructions:
-
-```bash
-# Pull repository
-git clone https://github.com/ultraleap/UltraleapTrackingWebSocket.git
-cd ultraleap-tracking-websocket
-
-# Prepare build folder
-mkdir build
-cd build
-
-# Build solution and executable
-cmake ..
-cmake --build .
-```
-
-## :checkered_flag: How to use ?
-
-Once built, run the executable to start the websocket server.
-
-Download the [LeapJS repository](https://github.com/leapmotion/leapjs) and run one of the webpages from the `examples` folder such as `dumper.html` to see the hand data coming through.
-
-## :memo: Authors & Contributors
-- Author: [Rodolphe Houdas](https://github.com/rodolpheh)
-- Contributors:
-	- [James Provan](https://github.com/JamesProvan-UL)
+   ```sh
+   hdiutil create -volname 'Ultraleap Tracking WebSocket' -srcfolder '/absolute/path/to/bundled.app' -ov -format UDZO '/absolute/output/path/UltraleapTrackingWebSocket.dmg'
+   ```

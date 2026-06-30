@@ -1,130 +1,96 @@
 cmake_minimum_required(VERSION 3.16.3)
+project("LeapWS" VERSION 0.1.0 DESCRIPTION "Transmit hand data through a WebSocket" LANGUAGES C)
 
-project(
-  "LeapWS"
-  VERSION 0.1.0
-  DESCRIPTION "Transmit hand data through a WebSocket"
-  LANGUAGES C
-)
-
-# Enforce building in a build folder
+# Enforce out-of-source build
 if (CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
-    message(FATAL_ERROR "Run CMake in a separate build directory to avoid source code contamination.")
+    message(FATAL_ERROR "Build in a separate directory.")
 endif ()
 
-# For Libwebsockets (?)
-SET(SERVER_NAME Server)
+# --- 1. Local libwebsockets (Non-SSL Build) ---
 
-if(WIN32)
-  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(CMAKE_LIBRARY_ARCHITECTURE x64)
-  else()
-    set(CMAKE_LIBRARY_ARCHITECTURE x86)
-  endif()
+# REQUIREMENT: User MUST provide LWS_CUSTOM_ROOT
+if(NOT DEFINED LWS_CUSTOM_ROOT)
+    message(FATAL_ERROR "❌ ERROR: LWS_CUSTOM_ROOT is not defined.\n"
+                        "   You must specify the path to your custom libwebsockets build directory.\n"
+                        "   Example:\n"
+                        "     cmake -DLWS_CUSTOM_ROOT='/absolute/path/to/libwebsockets/build' ..")
 endif()
 
-# -------- Search for libwebsockets
-
-find_package(libwebsockets CONFIG REQUIRED)
-
-require_lws_config(LWS_ROLE_WS 1 requirements)
-
-# Add libwebsockets to the project
-if (websockets_shared)
-  find_library(LIBWEBSOCKETS_LIBS websockets_shared)
-else()
-  find_library(LIBWEBSOCKETS_LIBS websockets)
+if(NOT EXISTS "${LWS_CUSTOM_ROOT}/lib")
+    message(FATAL_ERROR "❌ ERROR: The path provided for LWS_CUSTOM_ROOT does not contain a 'lib' folder.\n"
+                        "   Current value: ${LWS_CUSTOM_ROOT}\n"
+                        "   Please check if you pointed to the source root or the build directory.")
 endif()
 
-# -------- Search for LeapC and include the headers and libraries
+message(STATUS "🔍 Using custom libwebsockets from: ${LWS_CUSTOM_ROOT}")
 
-# Set path for cmake files
-if (WIN32)
-	file(TO_CMAKE_PATH "$ENV{ProgramFiles}\\Ultraleap" ULTRALEAP_PATH_ROOT)
-elseif (APPLE)
-	set(ULTRALEAP_PATH_ROOT "/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK")
-elseif (UNIX)
-	set(ULTRALEAP_PATH_ROOT "/usr/share/doc/ultraleap-hand-tracking-service/lib/cmake/LeapSDK")
+# Find the library in the 'lib' subdirectory of the specified path
+find_library(LIBWEBSOCKETS_LIB
+    NAMES websockets libwebsockets
+    PATHS "${LWS_CUSTOM_ROOT}/lib"
+    NO_DEFAULT_PATH # Do not search system paths like /usr/local/lib
+)
+
+if (NOT LIBWEBSOCKETS_LIB)
+    message(FATAL_ERROR "❌ Could not find libwebsockets in '${LWS_CUSTOM_ROOT}/lib'.\n"
+                        "   Ensure you built libwebsockets successfully in that location.")
+endif ()
+
+# Verify the library doesn't link to OpenSSL (safety check)
+execute_process(
+    COMMAND otool -L "${LIBWEBSOCKETS_LIB}"
+    OUTPUT_VARIABLE LWS_OTOOL_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if("${LWS_OTOOL_OUTPUT}" MATCHES "libssl|libcrypto")
+    message(WARNING "⚠️  Warning: Your libwebsockets seems to be linked against OpenSSL!\n"
+                    "   The deployment script might fail if OpenSSL isn't bundled.\n"
+                    "   Ensure you built libwebsockets with -DLWS_WITH_SSL=OFF.")
 endif()
 
-find_package(LeapSDK
-	REQUIRED
-	PATHS
-		"${ULTRALEAP_PATH_ROOT}")
+message(STATUS "🦾 Found libwebsockets: ${LIBWEBSOCKETS_LIB}")
+get_filename_component(LWS_NAME ${LIBWEBSOCKETS_LIB} NAME)
 
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+# --- 2. Find Leap SDK (macOS only) ---
+set(ULTRALEAP_ROOT "/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK")
+include_directories("${ULTRALEAP_ROOT}/include")
+find_library(LEAPC_LIB NAMES libLeapC.dylib LeapC PATHS "${ULTRALEAP_ROOT}/lib" NO_DEFAULT_PATH)
+if (NOT LEAPC_LIB)
+    message(FATAL_ERROR "libLeapC.dylib not found.")
+endif ()
 
-if (WIN32)
-	find_package(PThreads4W REQUIRED)
-elseif (UNIX)
- 	find_package(Threads REQUIRED)
-endif()
-
+# --- 3. Threads ---
 find_package(Threads REQUIRED)
 
-get_target_property(
-	LEAPC_IMPORTED_CONFIG
-	LeapSDK::LeapC
-	IMPORTED_CONFIGURATIONS
+# --- 4. Build libUtils ---
+add_library(libUtils OBJECT utils.c)
+target_link_libraries(libUtils PUBLIC "${LEAPC_LIB}")
+target_include_directories(libUtils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# --- 5. Build Executable ---
+add_executable(Ultraleap-Tracking-WS main.c)
+target_link_libraries(Ultraleap-Tracking-WS PUBLIC libUtils Threads::Threads "${LIBWEBSOCKETS_LIB}" "${LEAPC_LIB}")
+
+# --- 6. Bundle Libraries ---
+set_target_properties(Ultraleap-Tracking-WS PROPERTIES
+    INSTALL_RPATH "@loader_path"
+    BUILD_RPATH "@loader_path"
+    SKIP_BUILD_RPATH FALSE
+    BUILD_WITH_INSTALL_RPATH TRUE
 )
 
-get_target_property(
-	LEAPC_SHARED_LIB_PATH
-	LeapSDK::LeapC
-	IMPORTED_LOCATION_${LEAPC_IMPORTED_CONFIG}
+# 6a: Bundle libLeapC
+add_custom_command(TARGET Ultraleap-Tracking-WS POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "${LEAPC_LIB}" $<TARGET_FILE_DIR:Ultraleap-Tracking-WS>
+    COMMAND install_name_tool -change "@rpath/libLeapC.6.dylib" "@loader_path/libLeapC.dylib" $<TARGET_FILE:Ultraleap-Tracking-WS>
+    COMMENT "Bundling libLeapC.dylib"
 )
 
-# -------- Set shared libraries and executables
-
-# Build libUtils and link LeapC to it
-
-add_library(
-	libUtils
-	OBJECT
-	"utils.c")
-
-if (WIN32)
-	target_link_libraries(
-		libUtils
-		PUBLIC
-		LeapSDK::LeapC)
-elseif (UNIX)
-	target_link_libraries(
-		libUtils
-		PUBLIC
-		LeapSDK::LeapC
-		m)
-endif()
-
-target_include_directories(
-	libUtils
-	PUBLIC
-	${CMAKE_CURRENT_SOURCE_DIR})
-
-# Build the executable and link libs to it
-
-add_executable(Ultraleap-Tracking-WS "main.c")
-
-if (WIN32)
-	target_link_libraries(
-		Ultraleap-Tracking-WS
-		PUBLIC
-		libUtils
-		PThreads4W::PThreads4W
-		${LIBWEBSOCKETS_LIBS})
-elseif (UNIX)
-	target_link_libraries(
-		Ultraleap-Tracking-WS
-		PUBLIC
-		libUtils
-		Threads::Threads
-		${LIBWEBSOCKETS_LIBS})
-endif()
-
-add_custom_command(
-	TARGET Ultraleap-Tracking-WS
-	POST_BUILD
-	COMMAND
-		${CMAKE_COMMAND} -E copy
-		${LEAPC_SHARED_LIB_PATH}
-		$<TARGET_FILE_DIR:Ultraleap-Tracking-WS>)
+# 6b: Bundle libwebsockets
+add_custom_command(TARGET Ultraleap-Tracking-WS POST_BUILD
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bundling_helper.sh
+        $<TARGET_FILE:Ultraleap-Tracking-WS>
+        "${LIBWEBSOCKETS_LIB}"
+    COMMENT "Bundling libwebsockets"
+)
