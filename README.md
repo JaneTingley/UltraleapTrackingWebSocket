@@ -2,9 +2,11 @@
 
 # Ultraleap Tracking WebSocket
 
-This modified fork of Ultraleap Tracking WebSocket restores communication between LeapJS-based projects and Leap Motion Controllers on **macOS** following the removal of WebSocket support from Ultraleap's official software. The end result is a binary wrapped as a macOS `.app` for easy deployment.
+This modified fork of Ultraleap Tracking WebSocket restores communication between [LeapJS](https://github.com/leapmotion/leapjs)-based projects and Leap Motion Controllers on **macOS** following the removal of WebSocket support from Ultraleap's official software. The end result is a binary wrapped as a macOS `.app` for easy deployment.
 
 To use the prebuilt version, simply download the `.dmg` from this repository's [Releases](https://github.com/JaneTingley/UltraleapTrackingWebSocket/releases), or read on to build from source.
+
+Note that **LeapJS also requires patching** to restore working WebSocket connectivity; see [this Gist](https://gist.github.com/MarkoCindric-xyz/82c4e920d1cc76affbae88831eba694c) for more information.
 
 ## Confirmed Working Build Requirements
 
